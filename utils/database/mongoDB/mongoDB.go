@@ -51,14 +51,26 @@ func GetCollection(coll string) *mongo.Collection {
 	return db.Collection(coll)
 }
 
-func InsertToCollection[T any](coll string, doc T) (*mongo.InsertOneResult, error) {
-	return GetCollection(coll).InsertOne(customContext.EmptyCtx, doc)
+func GetById[T any](coll string, id string, opts ...*options.FindOneOptions) (T, error) {
+	var result T
+	filter := bson.D{{Key: "_id", Value: id}}
+	err := GetCollection(coll).FindOne(customContext.EmptyCtx, filter, opts...).Decode(&result)
+	return result, err
 }
 
-func InsertBulkToCollection[T interface{}](coll string, docs []T) (*mongo.InsertManyResult, error) {
+func InsertToCollection[T any](coll string, doc T, opts ...*options.InsertOneOptions) (*mongo.InsertOneResult, error) {
+	return GetCollection(coll).InsertOne(customContext.EmptyCtx, doc, opts...)
+}
+
+func InsertBulkToCollection[T interface{}](coll string, docs []T, opts ...*options.InsertManyOptions) (*mongo.InsertManyResult, error) {
 	// to pass type check
 	_docs := collection.Map[T, interface{}](docs, func(doc T) interface{} {
 		return doc
 	})
-	return GetCollection(coll).InsertMany(customContext.EmptyCtx, _docs)
+	return GetCollection(coll).InsertMany(customContext.EmptyCtx, _docs, opts...)
+}
+
+func UpdateById(coll string, id string, update any, options ...*options.UpdateOptions) (*mongo.UpdateResult, error) {
+	filter := bson.D{{Key: "_id", Value: id}}
+	return GetCollection(coll).UpdateOne(customContext.EmptyCtx, filter, update, options...)
 }
