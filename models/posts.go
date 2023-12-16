@@ -2,6 +2,7 @@ package model
 
 import "time"
 
+// TODO: add airline
 type Post struct {
 	Title     string     `bson:"title" json:"title"`
 	Summary   string     `bson:"summary" json:"summary"`
@@ -12,9 +13,9 @@ type Post struct {
 	Source    DataSource `bson:"source" json:"source"`
 }
 
-type DataSource int
+type DataSource string
 
 const (
-	DataSourceFlyday DataSource = iota
-	DataSourceFlyAgain
+	DataSourceFlyday   DataSource = "flyday"
+	DataSourceFlyAgain DataSource = "flyagain"
 )
