@@ -10,6 +10,6 @@ clean:
 	rm bin/flight-info-agg
 
 dev:
-	go run main.go
+	go run cmd/app/main.go
 
 

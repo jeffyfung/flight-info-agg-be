@@ -5,32 +5,29 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/jeffyfung/flight-info-agg/api/middlewares"
-	"github.com/jeffyfung/flight-info-agg/config"
+	"github.com/go-errors/errors"
 	model "github.com/jeffyfung/flight-info-agg/models"
+	"github.com/jeffyfung/flight-info-agg/pkg/auth"
 	"github.com/jeffyfung/flight-info-agg/pkg/database/mongoDB"
-	"github.com/jeffyfung/flight-info-agg/pkg/password"
+	"github.com/jeffyfung/flight-info-agg/pkg/tags"
 	"github.com/labstack/echo/v4"
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/gothic"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type (
-	QueryPostPayload struct {
-		From time.Time `json:"from" `
-		To   time.Time `json:"to"`
-		Tags []string  `json:"tags"`
+	QueryPostRequest struct {
+		From      time.Time `json:"from"`
+		To        time.Time `json:"to"`
+		Locations []string  `json:"locations"`
+		Airlines  []string  `json:"airlines"`
 	}
 
-	SignInPayload struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-
-	UpdateQueryPayload struct {
-		Tags         []string           `json:"tags,omitempty"`
-		Notification model.Notification `json:"notification"`
+	UserQueryPostRequest struct {
+		QueryPostRequest
+		LoadUserSettings bool `json:"load_user_settings"`
 	}
 )
 
@@ -38,188 +35,254 @@ func HealthCheckHandler(c echo.Context) error {
 	return c.String(http.StatusOK, "OK")
 }
 
-// find posts by tags and date
-// Question: when is this used? when website gets feed
-func QueryPostsHandler(c echo.Context) error {
-	var filter QueryPostPayload
-	err := c.Bind(&filter)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest)
+func AuthProviderHandler(c echo.Context) error {
+	// try to get the user without re-authenticating
+	if gothUser, err := gothic.CompleteUserAuth(c.Response(), c.Request()); err == nil {
+		return c.JSON(http.StatusOK, gothUser)
+	} else {
+		gothic.BeginAuthHandler(c.Response(), c.Request())
+		return nil
 	}
-
-	dbFilter := bson.M{}
-	if filter.Tags != nil {
-		dbFilter["tags"] = bson.M{"$in": filter.Tags}
-	}
-	if !filter.From.IsZero() || !filter.To.IsZero() {
-		timeFilter := bson.M{}
-		if !filter.From.IsZero() {
-			timeFilter["$gte"] = filter.From
-		}
-		if !filter.To.IsZero() {
-			timeFilter["$lt"] = filter.To
-		}
-		dbFilter["pub_date"] = timeFilter
-	}
-
-	posts, err := mongoDB.Find[model.Post]("posts", dbFilter)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	return c.JSON(http.StatusOK, model.Response{Payload: posts})
 }
 
-// Update the criterion of a user's feed
-func UpdateQueryHandler(c echo.Context) error {
-	var query UpdateQueryPayload
-	err := c.Bind(&query)
+func AuthCallbackHandler(c echo.Context) error {
+	gothUser, err := gothic.CompleteUserAuth(c.Response(), c.Request())
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest)
+		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 	}
 
-	lastUpdated := time.Now().UTC()
-	newQuery := model.Query{
-		Tags:         query.Tags,
-		Notification: query.Notification,
-		LastUpdated:  &lastUpdated,
-	}
-	user := c.Get("user").(model.UserPublicInfo)
-	update := bson.D{{Key: "$set", Value: bson.D{{Key: "query", Value: newQuery}}}}
-	_, err = mongoDB.UpdateById("users", user.Email, update)
+	auth.AddUserToSession(c, gothUser)
+
+	// when user logs in, if the user is not in the database, create a new user with the information from provider
+	// e.g. email, name, userID? - uid -> provider + userID
+	// the callback should return whether the user is new or not
+	dbUser, err := mongoDB.GetById[model.User]("users", gothUser.Provider+"__"+gothUser.Email)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "MongoDB: "+err.Error())
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			t := time.Now().UTC()
+			user := model.User{
+				ID:          gothUser.Provider + "__" + gothUser.Email,
+				Email:       gothUser.Email,
+				Name:        gothUser.Name,
+				Provider:    gothUser.Provider,
+				AvatarURL:   gothUser.AvatarURL,
+				LastUpdated: &t,
+				Query: model.Query{
+					Notification: model.NotificationNull,
+				},
+			}
+			mongoDB.InsertToCollection[model.User]("users", user)
+			return c.Redirect(http.StatusFound, "http://localhost:3000/profile?new=1")
+		} else {
+			fmt.Println(err.(*errors.Error).ErrorStack())
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+	} else {
+		// update last login time
+		t := time.Now().UTC()
+		mongoDB.UpdateById("users", dbUser.ID, bson.D{{Key: "$set", Value: bson.D{{Key: "last_login", Value: &t}}}})
+		return c.Redirect(http.StatusFound, "http://localhost:3000")
 	}
 
+}
+
+func ProviderLogoutHandler(c echo.Context) error {
+	gothic.Logout(c.Response(), c.Request())
+	auth.RemoveUserFromSession(c)
 	return c.JSON(http.StatusOK, struct{}{})
 }
 
-func CreateUserHandler(c echo.Context) error {
-	var user model.User
-	err := c.Bind(&user)
+func UserProfileHandler(c echo.Context) error {
+	gothUser := c.Get("gothUser").(goth.User)
+	userID := gothUser.Provider + "__" + gothUser.Email
+	user, err := mongoDB.GetById[model.User]("users", userID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		fmt.Println(err.(*errors.Error).ErrorStack())
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	// check if email is taken
-	u, err := mongoDB.GetById[model.User]("users", user.Email)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			// expected behaviour
-		} else {
-			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Database Error: %v", err.Error()))
-		}
-	} else if u.Email != "" {
-		// db already contains the email
-		return echo.NewHTTPError(http.StatusBadRequest, "Email already taken")
-	}
+	selectedLocs := tags.EnrichLocationsWithLabels(user.SelectedLocations)
+	selectedAirlines := tags.EnrichAirlinesWithLabels(user.SelectedAirlines)
 
-	user.Role = model.RoleBasic
-	user.Password, err = password.HashPassword(user.Password)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Password does not match required format or length")
-	}
-	t := time.Now().UTC()
-	user.Query.LastUpdated = &t
-
-	_, err = mongoDB.InsertToCollection[model.User]("users", user)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Database Error: %v", err.Error()))
-	}
-
-	return c.JSON(http.StatusCreated, model.Response{Payload: struct {
-		Email string `json:"_id" bson:"_id"`
-		Name  string `json:"name,omitempty"`
+	var wrappedUser = struct {
+		model.User
+		SelectedLocations []tags.DestWithLabel     `json:"selected_locations"`
+		SelectedAirlines  []tags.AirlinesWithLabel `json:"selected_airlines"`
 	}{
-		Email: user.Email,
-		Name:  user.Name,
-	}})
+		model.User{
+			ID:          user.ID,
+			Email:       user.Email,
+			Name:        user.Name,
+			Provider:    user.Provider,
+			AvatarURL:   user.AvatarURL,
+			LastUpdated: user.LastUpdated,
+			LastLogin:   user.LastLogin,
+		},
+		selectedLocs,
+		selectedAirlines,
+	}
+
+	return c.JSON(http.StatusOK, model.Response{Payload: wrappedUser})
 }
 
-func SignInHandler(c echo.Context) error {
-	var payload SignInPayload
-	err := c.Bind(&payload)
+func UpdateUserProfileHandler(c echo.Context) error {
+	gothUser := c.Get("gothUser").(goth.User)
+	userID := gothUser.Provider + "__" + gothUser.Email
+
+	var req model.User
+	err := c.Bind(&req)
 	if err != nil {
+		fmt.Printf("Unable to bind request: %v\n", err.Error())
 		return echo.NewHTTPError(http.StatusBadRequest)
 	}
 
-	user, err := mongoDB.GetById[model.User]("users", payload.Email)
+	update := bson.D{{Key: "$set", Value: bson.D{
+		{Key: "last_updated", Value: time.Now().UTC()},
+		{Key: "selected_locations", Value: req.SelectedLocations},
+		{Key: "selected_airlines", Value: req.SelectedAirlines},
+		{Key: "notification", Value: req.Notification},
+	}}}
+	_, err = mongoDB.UpdateById("users", userID, update)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return echo.NewHTTPError(http.StatusUnauthorized, "User does not exist or password is invalid")
+		fmt.Println(err.(*errors.Error).ErrorStack())
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	} else {
+		return c.JSON(http.StatusOK, struct{}{})
+	}
+}
+
+func UserQueryPostsHandler(c echo.Context) error {
+	var req UserQueryPostRequest
+	err := c.Bind(&req)
+	if err != nil {
+		fmt.Printf("Unable to bind request: %v\n", err.Error())
+		return echo.NewHTTPError(http.StatusBadRequest)
+	}
+
+	filter := bson.D{}
+	selectedLocations, selectedAirlines := req.Locations, req.Airlines
+
+	if req.LoadUserSettings {
+		gothUser := c.Get("gothUser").(goth.User)
+		user, err := mongoDB.GetById[model.User]("users", gothUser.Provider+"__"+gothUser.Email)
+		if err != nil {
+			fmt.Println("Cannot find user in database")
+			fmt.Println(err.(*errors.Error).ErrorStack())
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Database Error: %v", err.Error()))
-	}
-	if match := password.CheckPasswordHash(payload.Password, user.Password); !match {
-		return echo.NewHTTPError(http.StatusUnauthorized, "User does not exist or password is invalid")
+
+		if len(user.SelectedLocations) > 0 {
+			filter = append(filter, bson.E{
+				Key:   "locations",
+				Value: bson.M{"$in": user.SelectedLocations},
+			})
+		}
+		if len(user.SelectedAirlines) > 0 {
+			filter = append(filter, bson.E{
+				Key:   "airlines",
+				Value: bson.M{"$in": user.SelectedAirlines},
+			})
+		}
+		selectedLocations, selectedAirlines = user.SelectedLocations, user.SelectedAirlines
+	} else {
+		if len(req.Locations) > 0 {
+			filter = append(filter, bson.E{
+				Key:   "locations",
+				Value: bson.M{"$in": req.Locations},
+			})
+		}
+		if len(req.Airlines) > 0 {
+			filter = append(filter, bson.E{
+				Key:   "airlines",
+				Value: bson.M{"$in": req.Airlines},
+			})
+		}
 	}
 
-	expirationTime := time.Now().Add(time.Duration(config.Cfg.Server.JwtExpiry) * time.Second)
-	claims := &middlewares.Claims{
-		Email: user.Email,
-		Role:  user.Role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString(config.Cfg.Server.JwtSecret)
+	sort := []mongoDB.SortOption{{SortKey: "pub_date", Order: -1}}
+	posts, err := mongoDB.Find[model.Post]("posts", filter, sort)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Cannot sign JWT: %v", err.Error()))
+		fmt.Println("Cannot find posts in database")
+		fmt.Println(err.(*errors.Error).ErrorStack())
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	selectedLocationsWithLabel := tags.EnrichLocationsWithLabels(selectedLocations)
+	selectedAirlinesWithLabel := tags.EnrichAirlinesWithLabels(selectedAirlines)
+
+	return c.JSON(http.StatusOK, model.Response{
+		Payload: struct {
+			Posts             []model.Post             `json:"posts"`
+			SelectedLocations []tags.DestWithLabel     `json:"selected_locations"`
+			SelectedAirlines  []tags.AirlinesWithLabel `json:"selected_airlines"`
+		}{
+			Posts:             posts,
+			SelectedLocations: selectedLocationsWithLabel,
+			SelectedAirlines:  selectedAirlinesWithLabel,
+		},
+	})
+}
+
+func QueryPostsHandler(c echo.Context) error {
+	var req QueryPostRequest
+	err := c.Bind(&req)
+	if err != nil {
+		fmt.Printf("Unable to bind request: %v\n", err.Error())
+		return echo.NewHTTPError(http.StatusBadRequest)
+	}
+
+	filter := bson.D{}
+	if len(req.Locations) > 0 {
+		filter = append(filter, bson.E{
+			Key:   "locations",
+			Value: bson.M{"$in": req.Locations},
+		})
+	}
+	if len(req.Airlines) > 0 {
+		filter = append(filter, bson.E{
+			Key:   "airlines",
+			Value: bson.M{"$in": req.Airlines},
+		})
+	}
+
+	sort := []mongoDB.SortOption{{SortKey: "pub_date", Order: -1}}
+	posts, err := mongoDB.Find[model.Post]("posts", filter, sort)
+	if err != nil {
+		fmt.Println("Cannot find posts in database")
+		fmt.Println(err.(*errors.Error).ErrorStack())
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
 	return c.JSON(http.StatusOK, model.Response{
 		Payload: struct {
-			JWT string `json:"jwt"`
+			Posts []model.Post `json:"posts"`
 		}{
-			JWT: tokenStr,
+			Posts: posts,
 		},
 	})
+	// if filter.Tags != nil {
+	// 	dbFilter = append(dbFilter, bson.E{Key: "tags", Value: bson.M{"$in": filter.Tags}})
+	// }
+	// if !filter.From.IsZero() || !filter.To.IsZero() {
+	// 	timeFilter := bson.M{}
+	// 	if !filter.From.IsZero() {
+	// 		timeFilter["$gte"] = filter.From
+	// 	}
+	// 	if !filter.To.IsZero() {
+	// 		timeFilter["$lt"] = filter.To
+	// 	}
+	// 	dbFilter = append(dbFilter, bson.E{Key: "pub_date", Value: timeFilter})
+	// }
 }
 
-// this is called after user logs in
-// the first call should be at X - 30 seconds after log in
-// i.e. 30 seconds buffer
-func RenewJWTHandler(c echo.Context) error {
-	authHeader, ok := c.Request().Header["Authorization"]
-	if !ok || authHeader[0] == "" {
-		return echo.NewHTTPError(http.StatusUnauthorized, "JWT not found in header")
-	}
-
-	claims := &middlewares.Claims{}
-	jwtTokenStr := authHeader[0]
-	_, err := jwt.ParseWithClaims(jwtTokenStr, claims, func(token *jwt.Token) (any, error) {
-		return config.Cfg.Server.JwtSecret, nil
-	})
-
-	if err != nil {
-		if err == jwt.ErrSignatureInvalid {
-			return echo.NewHTTPError(http.StatusUnauthorized)
-		}
-		return echo.NewHTTPError(http.StatusBadRequest)
-	}
-
-	if time.Until(claims.ExpiresAt.Time) > 30*time.Second {
-		return echo.NewHTTPError(http.StatusBadRequest, "Cannot refresh token until 30s before expiry")
-	}
-
-	expirationTime := time.Now().Add(5 * time.Minute)
-	claims.ExpiresAt = jwt.NewNumericDate(expirationTime)
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tknStr, err := token.SignedString(config.Cfg.Server.JwtSecret)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-
-	return c.JSON(http.StatusCreated, model.Response{
-		Payload: struct {
-			JWT string `json:"jwt"`
-		}{
-			JWT: tknStr,
-		},
-	})
-
+func TagsHandler(c echo.Context) error {
+	dests := tags.DestinationsWithLabels()
+	airlines := tags.AirlinesWithLabels()
+	return c.JSON(http.StatusOK, model.Response{Payload: struct {
+		Locations []tags.DestWithLabel     `json:"locations"`
+		Airlines  []tags.AirlinesWithLabel `json:"airlines"`
+	}{
+		Locations: dests,
+		Airlines:  airlines,
+	}})
 }
-
-// how to create an admin user?
-// TODO: sign-in - use SSO?

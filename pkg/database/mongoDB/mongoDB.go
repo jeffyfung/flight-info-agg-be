@@ -1,17 +1,23 @@
 package mongoDB
 
 import (
-	"errors"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/go-errors/errors"
 	"github.com/jeffyfung/flight-info-agg/config"
 	"github.com/jeffyfung/flight-info-agg/pkg/collection"
 	"github.com/jeffyfung/flight-info-agg/pkg/customContext"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type (
+	SortOption struct {
+		SortKey string
+		Order   int
+	}
 )
 
 var db *mongo.Database
@@ -53,11 +59,18 @@ func GetById[T any](coll string, id string, opts ...*options.FindOneOptions) (T,
 	var result T
 	filter := bson.D{{Key: "_id", Value: id}}
 	err := GetCollection(coll).FindOne(customContext.EmptyCtx, filter, opts...).Decode(&result)
-	return result, err
+	if err != nil {
+		return result, errors.New(err)
+	}
+	return result, nil
 }
 
 func InsertToCollection[T any](coll string, doc T, opts ...*options.InsertOneOptions) (*mongo.InsertOneResult, error) {
-	return GetCollection(coll).InsertOne(customContext.EmptyCtx, doc, opts...)
+	result, err := GetCollection(coll).InsertOne(customContext.EmptyCtx, doc, opts...)
+	if err != nil {
+		return nil, errors.New(err)
+	}
+	return result, nil
 }
 
 func InsertBulkToCollection[T any](coll string, docs []T, opts ...*options.InsertManyOptions) (*mongo.InsertManyResult, error) {
@@ -65,24 +78,39 @@ func InsertBulkToCollection[T any](coll string, docs []T, opts ...*options.Inser
 	_docs := collection.Map[T, any](docs, func(doc T) any {
 		return doc
 	})
-	return GetCollection(coll).InsertMany(customContext.EmptyCtx, _docs, opts...)
+	result, err := GetCollection(coll).InsertMany(customContext.EmptyCtx, _docs, opts...)
+	if err != nil {
+		return nil, errors.New(err)
+	}
+	return result, nil
 }
 
 func UpdateById(coll string, id string, update any, options ...*options.UpdateOptions) (*mongo.UpdateResult, error) {
 	filter := bson.D{{Key: "_id", Value: id}}
-	return GetCollection(coll).UpdateOne(customContext.EmptyCtx, filter, update, options...)
+	result, err := GetCollection(coll).UpdateOne(customContext.EmptyCtx, filter, update, options...)
+	if err != nil {
+		return nil, errors.New(err)
+	}
+	return result, nil
 }
 
-func Find[T any](coll string, filter any) (results []T, err error) {
-	cursor, err := GetCollection(coll).Find(customContext.EmptyCtx, filter)
+func Find[T any](coll string, filter any, sorts []SortOption) (results []T, err error) {
+	sortOptions := collection.Map(sorts, func(sort SortOption) bson.E {
+		return bson.E{Key: sort.SortKey, Value: sort.Order}
+	})
+
+	options := options.Find().SetSort(sortOptions)
+	cursor, err := GetCollection(coll).Find(customContext.EmptyCtx, filter, options)
 	if err != nil {
-		log.Println(err)
-		return nil, err
+		return nil, errors.New(err)
 	}
 
 	if err = cursor.All(customContext.EmptyCtx, &results); err != nil {
-		log.Println(err)
-		return nil, err
+		return nil, errors.New(err)
+	}
+
+	if results == nil {
+		results = []T{}
 	}
 	return results, err
 }
