@@ -260,19 +260,6 @@ func QueryPostsHandler(c echo.Context) error {
 			Posts: posts,
 		},
 	})
-	// if filter.Tags != nil {
-	// 	dbFilter = append(dbFilter, bson.E{Key: "tags", Value: bson.M{"$in": filter.Tags}})
-	// }
-	// if !filter.From.IsZero() || !filter.To.IsZero() {
-	// 	timeFilter := bson.M{}
-	// 	if !filter.From.IsZero() {
-	// 		timeFilter["$gte"] = filter.From
-	// 	}
-	// 	if !filter.To.IsZero() {
-	// 		timeFilter["$lt"] = filter.To
-	// 	}
-	// 	dbFilter = append(dbFilter, bson.E{Key: "pub_date", Value: timeFilter})
-	// }
 }
 
 func TagsHandler(c echo.Context) error {

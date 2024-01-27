@@ -114,3 +114,12 @@ func Find[T any](coll string, filter any, sorts []SortOption) (results []T, err 
 	}
 	return results, err
 }
+
+// if filter is an empty bson.D, all documents will be deleted
+func DeleteMany(coll string, filter any) (*mongo.DeleteResult, error) {
+	result, err := GetCollection(coll).DeleteMany(customContext.EmptyCtx, filter)
+	if err != nil {
+		return nil, errors.New(err)
+	}
+	return result, nil
+}

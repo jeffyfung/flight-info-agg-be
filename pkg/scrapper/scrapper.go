@@ -15,6 +15,7 @@ import (
 	"github.com/jeffyfung/flight-info-agg/pkg/languages"
 	"github.com/jeffyfung/flight-info-agg/pkg/tags"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -77,6 +78,13 @@ func scrap() error {
 		log.Printf("Logged %v new posts\n", len(posts))
 	}
 
+	result, err := deleteOldPosts(3)
+	if err != nil {
+		log.Println("Cannot delete old posts:", err.(*errors.Error).ErrorStack())
+		return err
+	}
+	log.Printf("Delete %d old posts >3 months old", result.DeletedCount)
+
 	err = updateLastScrapDate()
 	if err != nil {
 		log.Println("Cannot update system info:", err)
@@ -87,9 +95,6 @@ func scrap() error {
 }
 
 func scrapFlyday(ch chan result, lastScrapDate time.Time) {
-	ch <- result{[]model.Post{}, nil}
-	return
-
 	log.Println("Start scrapping flyday")
 	c := colly.NewCollector(
 		colly.AllowedDomains("flyday.hk"),
@@ -112,10 +117,12 @@ func scrapFlyday(ch chan result, lastScrapDate time.Time) {
 
 	c.OnHTML("article.item", func(h *colly.HTMLElement) {
 		locations := []string{}
+		airlines := []string{}
 
 		div := h.DOM
 		title := div.Find(".penci-entry-title > a").Text()
 		locations = append(locations, extractDestinations(title)...)
+		airlines = append(airlines, extractAirlines(title)...)
 
 		URL := div.Find(".penci-entry-title > a").AttrOr("href", "https://flyday.hk/")
 		dateStr := div.Find("time.published").AttrOr("datetime", "https://flyday.hk/")
@@ -131,6 +138,7 @@ func scrapFlyday(ch chan result, lastScrapDate time.Time) {
 		}
 
 		summary := div.Find(".item-content > p").Text()
+		airlines = append(airlines, extractAirlines(summary)...)
 
 		div.Find(".cat > a").Each(func(_ int, s *goquery.Selection) {
 			category := s.Text()
@@ -138,11 +146,13 @@ func scrapFlyday(ch chan result, lastScrapDate time.Time) {
 		})
 
 		locations = collection.RemoveListDuplicates[string](locations)
+		airlines = collection.RemoveListDuplicates[string](airlines)
 
 		posts = append(posts, model.Post{
 			Title:     title,
 			Summary:   summary,
 			Locations: locations,
+			Airlines:  airlines,
 			URL:       URL,
 			PubDate:   pubDate,
 			CreatedAt: time.Now().UTC(),
@@ -157,6 +167,7 @@ func scrapFlyday(ch chan result, lastScrapDate time.Time) {
 
 func scrapFlyAgain(ch chan result, lastScrapDate time.Time) {
 	log.Println("Start scrapping flyAgain")
+
 	c := colly.NewCollector(
 		colly.AllowedDomains("flyagain.la"),
 	)
@@ -195,7 +206,6 @@ func scrapFlyAgain(ch chan result, lastScrapDate time.Time) {
 			return
 		}
 
-		// TODO: can be an issue
 		if pubDate.Before(lastScrapDate) {
 			return
 		}
@@ -317,4 +327,16 @@ func getLastScrapDate() (time.Time, error) {
 	}
 	output, err := mongoDB.GetById[lu]("system", "scrapper")
 	return output.LastUpdated, err
+}
+
+func deleteOldPosts(expireMonths int) (result *mongo.DeleteResult, err error) {
+	filter := bson.D{{
+		Key:   "pub_date",
+		Value: bson.M{"$lt": time.Now().UTC().AddDate(0, -1*expireMonths, 0)},
+	}}
+	result, err = mongoDB.DeleteMany("posts", filter)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
