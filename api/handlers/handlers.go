@@ -51,6 +51,10 @@ func AuthCallbackHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 	}
 
+	if gothUser.Name == "" && gothUser.NickName != "" {
+		gothUser.Name = gothUser.NickName
+	}
+
 	auth.AddUserToSession(c, gothUser)
 
 	// when user logs in, if the user is not in the database, create a new user with the information from provider

@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
+	"github.com/markbates/goth/providers/github"
 	"github.com/markbates/goth/providers/google"
 )
 
@@ -36,6 +37,7 @@ func NewAuth() {
 	gothic.Store = Store
 	goth.UseProviders(
 		google.New(config.Server.GoogleClientID, config.Server.GoogleClientSecret, "http://localhost:8080/auth/callback?provider=google"),
+		github.New(config.Server.GithubClientID, config.Server.GithubClientSecret, "http://localhost:8080/auth/callback?provider=github", "user:email"),
 	)
 }
 
@@ -44,8 +46,6 @@ func AddUserToSession(c echo.Context, user goth.User) error {
 	if err != nil {
 		return fmt.Errorf("problem getting session from store: %v", err.Error())
 	}
-
-	// TODO: convert to user
 
 	// Remove the raw data to reduce the size
 	user.RawData = map[string]interface{}{}
@@ -117,6 +117,5 @@ func User(c echo.Context) (*goth.User, error) {
 	}
 	u := user.(goth.User)
 
-	// TODO: convert to internal user id (provider + id)
 	return &u, nil
 }

@@ -264,7 +264,6 @@ var Airlines = []map[languages.Lang]string{
 	{languages.EN: "Korean Air", languages.TC: "大韓航空"},
 	{languages.EN: "United Airlines", languages.TC: "聯合航空"},
 	{languages.EN: "Emirates", languages.TC: "阿聯酋航空"},
-	{languages.EN: "Cathay Pacific", languages.TC: "國泰航空"},
 	{languages.EN: "Riyadh Air", languages.TC: "利雅得航空"},
 	{languages.EN: "Qatar Airways", languages.TC: "卡塔爾航空"},
 	{languages.EN: "Etihad Airways", languages.TC: "阿提哈德航空"},
