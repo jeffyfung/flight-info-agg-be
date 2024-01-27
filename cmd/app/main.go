@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/jeffyfung/flight-info-agg/api/handlers"
@@ -60,20 +59,10 @@ func startServer() {
 
 	// group of endpoints that require sign in
 	user := e.Group("/user", middlewares.UserMiddleware)
-	user.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
-		CookieName:     "flight_info_csrf",
-		TokenLookup:    "header:X-CSRF-TOKEN",
-		CookieSameSite: http.SameSiteLaxMode,
-		CookiePath:     "/",
-		CookieMaxAge:   auth.MaxAge,
-	}))
 
 	user.POST("/profile", handlers.UpdateUserProfileHandler)
 	user.GET("/profile", handlers.UserProfileHandler)
 	user.POST("/posts", handlers.UserQueryPostsHandler)
-	// user.POST("/renewJWT", handlers.RenewJWTHandler)
 
 	e.Logger.Fatal(e.Start(":" + config.Cfg.Server.Port))
 }
-
-// TODO: DB housekeeping - remove data from e.g. 3 months ago

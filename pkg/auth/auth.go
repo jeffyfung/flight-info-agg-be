@@ -30,6 +30,7 @@ func NewAuth() {
 		MaxAge:   MaxAge,
 		HttpOnly: true,
 		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
 	}
 
 	gothic.Store = Store

@@ -54,7 +54,6 @@ func AuthCallbackHandler(c echo.Context) error {
 	auth.AddUserToSession(c, gothUser)
 
 	// when user logs in, if the user is not in the database, create a new user with the information from provider
-	// e.g. email, name, userID? - uid -> provider + userID
 	// the callback should return whether the user is new or not
 	dbUser, err := mongoDB.GetById[model.User]("users", gothUser.Provider+"__"+gothUser.Email)
 	if err != nil {
