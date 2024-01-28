@@ -65,6 +65,7 @@ func loadConfigFromVariables() Config {
 	cfg.Server.GoogleClientSecret = os.Getenv("FLIGHTAGG_GOOGLE_CLIENT_SECRET")
 	cfg.Server.GithubClientID = os.Getenv("FLIGHTAGG_GITHUB_CLIENT_ID")
 	cfg.Server.GithubClientSecret = os.Getenv("FLIGHTAGG_GITHUB_CLIENT_SECRET")
+	cfg.Server.Domain = os.Getenv("FLIGHTAGG_DOMAIN")
 	cfg.Database.MongodbUri = os.Getenv("FLIGHTAGG_MONGODB_URI")
 	cfg.Email.SendGridAPIKey = os.Getenv("FLIGHTAGG_SENDGRID_API_KEY")
 	cfg.Email.FromEmail = os.Getenv("FLIGHTAGG_FROM_EMAIL")
