@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/jeffyfung/flight-info-agg/api/handlers"
@@ -45,6 +46,8 @@ func startServer() {
 	if config.Cfg.UIOrigin != "" {
 		allowedOrigins = append(allowedOrigins, config.Cfg.UIOrigin)
 	}
+	fmt.Println("Allowed origins: ", allowedOrigins)
+	log.Println("Allowed origins: ", allowedOrigins)
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     allowedOrigins,
 		AllowCredentials: true,
