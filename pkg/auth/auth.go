@@ -35,9 +35,17 @@ func NewAuth() {
 	}
 
 	gothic.Store = Store
+
+	var domain string
+	if config.Server.Domain != "" {
+		domain = config.Server.Domain
+	} else {
+		domain = "http://localhost:" + config.Server.Port
+	}
+
 	goth.UseProviders(
-		google.New(config.Server.GoogleClientID, config.Server.GoogleClientSecret, "http://localhost:8080/auth/callback?provider=google"),
-		github.New(config.Server.GithubClientID, config.Server.GithubClientSecret, "http://localhost:8080/auth/callback?provider=github", "user:email"),
+		google.New(config.Server.GoogleClientID, config.Server.GoogleClientSecret, fmt.Sprintf("%v/auth/callback?provider=google", domain)),
+		github.New(config.Server.GithubClientID, config.Server.GithubClientSecret, fmt.Sprintf("%v/auth/callback?provider=github", domain), "user:email"),
 	)
 }
 

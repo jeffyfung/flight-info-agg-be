@@ -18,6 +18,7 @@ type Config struct {
 		GoogleClientSecret string `required:"true" envconfig:"FLIGHTAGG_GOOGLE_CLIENT_SECRET"`
 		GithubClientID     string `required:"true" envconfig:"FLIGHTAGG_GITHUB_CLIENT_ID"`
 		GithubClientSecret string `required:"true" envconfig:"FLIGHTAGG_GITHUB_CLIENT_SECRET"`
+		Domain             string `envconfig:"FLIGHTAGG_DOMAIN"`
 	}
 	Database struct {
 		MongodbUri string `required:"true" envconfig:"FLIGHTAGG_MONGODB_URI"`
