@@ -30,6 +30,7 @@ type Config struct {
 var Cfg Config
 
 func LoadConfig() {
+	fmt.Println("check prod", os.Getenv("PROD") == "true")
 	if os.Getenv("PROD") == "true" {
 		Cfg = loadConfigFromVariables()
 		fmt.Println("Cfg", Cfg.Email.FromEmail)
