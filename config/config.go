@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
@@ -30,8 +31,10 @@ type Config struct {
 var Cfg Config
 
 func LoadConfig() {
-	fmt.Println("check prod", os.Getenv("PROD") == "true")
-	if os.Getenv("PROD") == "true" {
+	fmt.Println("prod", os.Getenv("PROD"))
+	b, err := strconv.ParseBool(os.Getenv("PROD"))
+	if err != nil || !b {
+		fmt.Println("Not in PROD env")
 		Cfg = loadConfigFromVariables()
 		fmt.Println("Cfg", Cfg.Email.FromEmail)
 		return
