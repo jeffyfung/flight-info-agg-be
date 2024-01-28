@@ -27,11 +27,6 @@ func main() {
 		}
 	}()
 
-	// err = scrapper.RunScrapper(12 * time.Hour)
-	// if err != nil {
-	// 	log.Fatal("Cron job fails", err.Error())
-	// }
-
 	auth.NewAuth()
 	startServer()
 }
@@ -43,9 +38,7 @@ func startServer() {
 	e.Use(middleware.Logger())
 
 	allowedOrigins := []string{"http://localhost:*"}
-	if config.Cfg.UIOrigin != "" {
-		allowedOrigins = append(allowedOrigins, config.Cfg.UIOrigin)
-	}
+	allowedOrigins = append(allowedOrigins, config.Cfg.UIOrigin)
 	fmt.Println("Allowed origins: ", allowedOrigins)
 	log.Println("Allowed origins: ", allowedOrigins)
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{

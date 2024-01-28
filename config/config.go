@@ -27,7 +27,7 @@ type Config struct {
 		SendGridAPIKey string `required:"true" envconfig:"FLIGHTAGG_SENDGRID_API_KEY"`
 		FromEmail      string `required:"true" envconfig:"FLIGHTAGG_FROM_EMAIL"`
 	}
-	UIOrigin string `envconfig:"FLIGHTAGG_UI_ORIGIN"`
+	UIOrigin string `default:"http://localhost:3000" envconfig:"FLIGHTAGG_UI_ORIGIN"`
 }
 
 var Cfg Config

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-errors/errors"
+	"github.com/jeffyfung/flight-info-agg/config"
 	model "github.com/jeffyfung/flight-info-agg/models"
 	"github.com/jeffyfung/flight-info-agg/pkg/auth"
 	"github.com/jeffyfung/flight-info-agg/pkg/database/mongoDB"
@@ -75,7 +76,7 @@ func AuthCallbackHandler(c echo.Context) error {
 				},
 			}
 			mongoDB.InsertToCollection[model.User]("users", user)
-			return c.Redirect(http.StatusFound, "http://localhost:3000/profile?new=1")
+			return c.Redirect(http.StatusFound, config.Cfg.UIOrigin+"/profile?new=1")
 		} else {
 			fmt.Println(err.(*errors.Error).ErrorStack())
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -84,7 +85,7 @@ func AuthCallbackHandler(c echo.Context) error {
 		// update last login time
 		t := time.Now().UTC()
 		mongoDB.UpdateById("users", dbUser.ID, bson.D{{Key: "$set", Value: bson.D{{Key: "last_login", Value: &t}}}})
-		return c.Redirect(http.StatusFound, "http://localhost:3000")
+		return c.Redirect(http.StatusFound, config.Cfg.UIOrigin)
 	}
 
 }
