@@ -2,14 +2,12 @@ package main
 
 import (
 	"log"
-	"time"
 
 	"github.com/jeffyfung/flight-info-agg/api/handlers"
 	"github.com/jeffyfung/flight-info-agg/api/middlewares"
 	"github.com/jeffyfung/flight-info-agg/config"
 	"github.com/jeffyfung/flight-info-agg/pkg/auth"
 	"github.com/jeffyfung/flight-info-agg/pkg/database/mongoDB"
-	"github.com/jeffyfung/flight-info-agg/pkg/scrapper"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -28,10 +26,10 @@ func main() {
 		}
 	}()
 
-	err = scrapper.RunScrapper(12 * time.Hour)
-	if err != nil {
-		log.Fatal("Cron job fails", err.Error())
-	}
+	// err = scrapper.RunScrapper(12 * time.Hour)
+	// if err != nil {
+	// 	log.Fatal("Cron job fails", err.Error())
+	// }
 
 	auth.NewAuth()
 	startServer()
@@ -42,8 +40,13 @@ func startServer() {
 
 	e.Use(middleware.Recover())
 	e.Use(middleware.Logger())
+
+	allowedOrigins := []string{"http://localhost:*"}
+	if config.Cfg.UIOrigin != "" {
+		allowedOrigins = append(allowedOrigins, config.Cfg.UIOrigin)
+	}
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:8080"},
+		AllowOrigins:     allowedOrigins,
 		AllowCredentials: true,
 	}))
 
