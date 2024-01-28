@@ -58,7 +58,7 @@ func LoadConfig() {
 
 func loadConfigFromVariables() Config {
 	cfg := Config{}
-	cfg.Server.Port = os.Getenv("FLIGHTAGG_PORT")
+	cfg.Server.Port = os.Getenv("PORT")
 	cfg.Server.Secret = []byte(os.Getenv("FLIGHTAGG_SECRET"))
 	cfg.Server.GoogleClientID = os.Getenv("FLIGHTAGG_GOOGLE_CLIENT_ID")
 	cfg.Server.GoogleClientSecret = os.Getenv("FLIGHTAGG_GOOGLE_CLIENT_SECRET")
