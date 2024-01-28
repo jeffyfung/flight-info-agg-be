@@ -31,13 +31,10 @@ type Config struct {
 var Cfg Config
 
 func LoadConfig() {
-	fmt.Println("prod", os.Getenv("PROD"))
-	fmt.Println("flights prod", os.Getenv("FLIGHTAGG_PROD"))
 	b, err := strconv.ParseBool(os.Getenv("PROD"))
 	if err == nil && b {
 		fmt.Println("In PROD env")
 		Cfg = loadConfigFromVariables()
-		fmt.Println("Cfg", Cfg.Email.FromEmail)
 		return
 	}
 
