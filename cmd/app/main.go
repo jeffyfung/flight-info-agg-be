@@ -42,10 +42,11 @@ func startServer() {
 	e.Use(middleware.Recover())
 	e.Use(middleware.Logger())
 
-	allowedOrigins := []string{"http://localhost:*"}
-	if config.Cfg.UIOrigin != "" {
-		allowedOrigins = append(allowedOrigins, config.Cfg.UIOrigin)
-	}
+	// allowedOrigins := []string{"http://localhost:*"}
+	// if config.Cfg.UIOrigin != "" {
+	// 	allowedOrigins = append(allowedOrigins, config.Cfg.UIOrigin)
+	// }
+	allowedOrigins := []string{config.Cfg.UIOrigin}
 	fmt.Println("Allowed origins: ", allowedOrigins)
 	log.Println("Allowed origins: ", allowedOrigins)
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
