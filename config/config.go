@@ -26,6 +26,7 @@ type Config struct {
 		SendGridAPIKey string `required:"true" envconfig:"FLIGHTAGG_SENDGRID_API_KEY"`
 		FromEmail      string `required:"true" envconfig:"FLIGHTAGG_FROM_EMAIL"`
 	}
+	UIOrigin string `envconfig:"FLIGHTAGG_UI_ORIGIN"`
 }
 
 var Cfg Config
@@ -66,5 +67,6 @@ func loadConfigFromVariables() Config {
 	cfg.Database.MongodbUri = os.Getenv("FLIGHTAGG_MONGODB_URI")
 	cfg.Email.SendGridAPIKey = os.Getenv("FLIGHTAGG_SENDGRID_API_KEY")
 	cfg.Email.FromEmail = os.Getenv("FLIGHTAGG_FROM_EMAIL")
+	cfg.UIOrigin = os.Getenv("FLIGHTAGG_UI_ORIGIN")
 	return cfg
 }
