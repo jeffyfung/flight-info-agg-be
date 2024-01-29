@@ -69,6 +69,5 @@ func loadConfigFromVariables() Config {
 	cfg.Database.MongodbUri = os.Getenv("FLIGHTAGG_MONGODB_URI")
 	cfg.Email.SendGridAPIKey = os.Getenv("FLIGHTAGG_SENDGRID_API_KEY")
 	cfg.Email.FromEmail = os.Getenv("FLIGHTAGG_FROM_EMAIL")
-	cfg.UIOrigin = os.Getenv("FLIGHTAGG_UI_ORIGIN")
 	return cfg
 }
