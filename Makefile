@@ -1,9 +1,13 @@
 build:
 	go mod tidy
-	go build -o bin/flight-info-agg ./cmd/app
+	go build -o bin/backend ./cmd/app
+	go build -o bin/cron ./cmd/cron
 
 run: build
-	./bin/flight-info-agg
+	./bin/backend
+
+run-cron: build
+	./bin/cron
 
 clean:
 	go clean
@@ -12,4 +16,6 @@ clean:
 dev:
 	go run cmd/app/main.go
 
+dev-cron:
+	go run cmd/cron/main.go
 

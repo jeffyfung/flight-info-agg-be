@@ -8,6 +8,7 @@ import (
 	"github.com/jeffyfung/flight-info-agg/config"
 	"github.com/jeffyfung/flight-info-agg/pkg/auth"
 	"github.com/jeffyfung/flight-info-agg/pkg/database/mongoDB"
+	"github.com/jeffyfung/flight-info-agg/pkg/notification/telegram"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -27,6 +28,11 @@ func main() {
 	}()
 
 	auth.NewAuth()
+	err = telegram.NewNotifier().SetUp()
+	if err != nil {
+		log.Fatal("Telegram error: ", err.Error())
+	}
+
 	startServer()
 }
 
@@ -43,6 +49,7 @@ func startServer() {
 	}))
 
 	e.GET("/", handlers.HealthCheckHandler)
+	e.POST("/webhook/telegram", handlers.TelegramWebhookHandler)
 
 	// login and logout
 	e.GET("/auth/callback", handlers.AuthCallbackHandler)

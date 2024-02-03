@@ -37,7 +37,7 @@ func NewAuth() {
 	gothic.Store = Store
 
 	var domain string
-	if config.Server.Domain != "" {
+	if config.Prod {
 		domain = config.Server.Domain
 	} else {
 		domain = "http://localhost:" + config.Server.Port

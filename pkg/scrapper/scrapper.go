@@ -1,12 +1,12 @@
 package scrapper
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/go-co-op/gocron"
 	"github.com/go-errors/errors"
 	colly "github.com/gocolly/colly/v2"
 	model "github.com/jeffyfung/flight-info-agg/models"
@@ -15,7 +15,6 @@ import (
 	"github.com/jeffyfung/flight-info-agg/pkg/languages"
 	"github.com/jeffyfung/flight-info-agg/pkg/tags"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -29,30 +28,11 @@ type result struct {
 	error error
 }
 
-func RunScrapper(interval time.Duration) error {
-	go main()
-
-	sche := gocron.NewScheduler(time.UTC)
-	_, err := sche.Every(1).Day().At("23:00").Do(main)
-	if err != nil {
-		return err
-	}
-
-	sche.StartAsync()
-	return nil
-}
-
-func main() {
-	scrap()
-	notify()
-}
-
-func scrap() error {
+func Scrap() ([]model.Post, error) {
 
 	lastScrapDate, err := getLastScrapDate()
 	if err != nil {
-		log.Println("Cannot get lastScrapDate", err.Error())
-		return err
+		return nil, errors.New("Cannot get lastScrapDate" + err.Error())
 	}
 
 	ch := make(chan result)
@@ -63,7 +43,7 @@ func scrap() error {
 	for i := 0; i < 2; i++ {
 		scrappedPosts, ok := <-ch
 		if !ok {
-			log.Fatal("Cannot get posts from channel")
+			return nil, errors.New("Cannot get posts from channel" + err.Error())
 		}
 		posts = append(posts, scrappedPosts.posts...)
 	}
@@ -71,27 +51,17 @@ func scrap() error {
 	if len(posts) > 0 {
 		_, err = mongoDB.InsertBulkToCollection[model.Post]("posts", posts)
 		if err != nil {
-			log.Println("Cannot insert to posts table:")
-			log.Println(err.(*errors.Error).ErrorStack())
-			return err
+			return nil, errors.New("Cannot insert to posts table: " + err.Error())
 		}
-		log.Printf("Logged %v new posts\n", len(posts))
+		fmt.Printf("Logged %v new posts\n", len(posts))
 	}
-
-	result, err := deleteOldPosts(3)
-	if err != nil {
-		log.Println("Cannot delete old posts:", err.(*errors.Error).ErrorStack())
-		return err
-	}
-	log.Printf("Delete %d old posts >3 months old", result.DeletedCount)
 
 	err = updateLastScrapDate()
 	if err != nil {
-		log.Println("Cannot update system info:", err)
-		return err
+		return nil, errors.New("Cannot update system info: " + err.Error())
 	}
 
-	return nil
+	return posts, nil
 }
 
 func scrapFlyday(ch chan result, lastScrapDate time.Time) {
@@ -167,7 +137,6 @@ func scrapFlyday(ch chan result, lastScrapDate time.Time) {
 
 func scrapFlyAgain(ch chan result, lastScrapDate time.Time) {
 	log.Println("Start scrapping flyAgain")
-
 	c := colly.NewCollector(
 		colly.AllowedDomains("flyagain.la"),
 	)
@@ -298,19 +267,6 @@ func extractAirlines(s string) []string {
 
 }
 
-// TODO: notify users on matched query (after last notification date - i.e. yesterday)
-// email?
-
-func notify() error {
-	// TODO: make concurrent
-	// for each user,
-	// if user notification is on
-	// get yesterday's data from DB
-	// find the posts that match the user's query
-	// send an email
-	return nil
-}
-
 func updateLastScrapDate() error {
 	update := bson.D{{
 		Key:   "$set",
@@ -327,16 +283,4 @@ func getLastScrapDate() (time.Time, error) {
 	}
 	output, err := mongoDB.GetById[lu]("system", "scrapper")
 	return output.LastUpdated, err
-}
-
-func deleteOldPosts(expireMonths int) (result *mongo.DeleteResult, err error) {
-	filter := bson.D{{
-		Key:   "pub_date",
-		Value: bson.M{"$lt": time.Now().UTC().AddDate(0, -1*expireMonths, 0)},
-	}}
-	result, err = mongoDB.DeleteMany("posts", filter)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
 }

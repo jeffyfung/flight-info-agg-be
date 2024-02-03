@@ -94,7 +94,16 @@ func UpdateById(coll string, id string, update any, options ...*options.UpdateOp
 	return result, nil
 }
 
-func Find[T any](coll string, filter any, sorts []SortOption) (results []T, err error) {
+func ReplaceByID[T any](coll string, id string, replacement T, options ...*options.ReplaceOptions) (*mongo.UpdateResult, error) {
+	filter := bson.D{{Key: "_id", Value: id}}
+	result, err := GetCollection(coll).ReplaceOne(customContext.EmptyCtx, filter, replacement, options...)
+	if err != nil {
+		return nil, errors.New(err)
+	}
+	return result, nil
+}
+
+func Find[T any](coll string, filter any, sorts ...SortOption) (results []T, err error) {
 	sortOptions := collection.Map(sorts, func(sort SortOption) bson.E {
 		return bson.E{Key: sort.SortKey, Value: sort.Order}
 	})

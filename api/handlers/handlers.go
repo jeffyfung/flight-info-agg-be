@@ -3,13 +3,16 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-errors/errors"
+	"github.com/google/uuid"
 	"github.com/jeffyfung/flight-info-agg/config"
 	model "github.com/jeffyfung/flight-info-agg/models"
 	"github.com/jeffyfung/flight-info-agg/pkg/auth"
 	"github.com/jeffyfung/flight-info-agg/pkg/database/mongoDB"
+	"github.com/jeffyfung/flight-info-agg/pkg/notification/telegram"
 	"github.com/jeffyfung/flight-info-agg/pkg/tags"
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth"
@@ -65,15 +68,14 @@ func AuthCallbackHandler(c echo.Context) error {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			t := time.Now().UTC()
 			user := model.User{
-				ID:          gothUser.Provider + "__" + gothUser.Email,
-				Email:       gothUser.Email,
-				Name:        gothUser.Name,
-				Provider:    gothUser.Provider,
-				AvatarURL:   gothUser.AvatarURL,
-				LastUpdated: &t,
-				Query: model.Query{
-					Notification: model.NotificationNull,
-				},
+				ID:           gothUser.Provider + "__" + gothUser.Email,
+				Email:        gothUser.Email,
+				Name:         gothUser.Name,
+				Provider:     gothUser.Provider,
+				AvatarURL:    gothUser.AvatarURL,
+				LastUpdated:  &t,
+				Notification: model.NotificationOff,
+				TelegramUID:  uuid.New().String(),
 			}
 			mongoDB.InsertToCollection[model.User]("users", user)
 			return c.Redirect(http.StatusFound, config.Cfg.UIOrigin+"/profile?new=1")
@@ -113,15 +115,7 @@ func UserProfileHandler(c echo.Context) error {
 		SelectedLocations []tags.DestWithLabel     `json:"selected_locations"`
 		SelectedAirlines  []tags.AirlinesWithLabel `json:"selected_airlines"`
 	}{
-		model.User{
-			ID:          user.ID,
-			Email:       user.Email,
-			Name:        user.Name,
-			Provider:    user.Provider,
-			AvatarURL:   user.AvatarURL,
-			LastUpdated: user.LastUpdated,
-			LastLogin:   user.LastLogin,
-		},
+		user,
 		selectedLocs,
 		selectedAirlines,
 	}
@@ -203,7 +197,7 @@ func UserQueryPostsHandler(c echo.Context) error {
 		}
 	}
 
-	sort := []mongoDB.SortOption{{SortKey: "pub_date", Order: -1}}
+	sort := mongoDB.SortOption{SortKey: "pub_date", Order: -1}
 	posts, err := mongoDB.Find[model.Post]("posts", filter, sort)
 	if err != nil {
 		fmt.Println("Cannot find posts in database")
@@ -249,7 +243,7 @@ func QueryPostsHandler(c echo.Context) error {
 		})
 	}
 
-	sort := []mongoDB.SortOption{{SortKey: "pub_date", Order: -1}}
+	sort := mongoDB.SortOption{SortKey: "pub_date", Order: -1}
 	posts, err := mongoDB.Find[model.Post]("posts", filter, sort)
 	if err != nil {
 		fmt.Println("Cannot find posts in database")
@@ -276,4 +270,43 @@ func TagsHandler(c echo.Context) error {
 		Locations: dests,
 		Airlines:  airlines,
 	}})
+}
+
+func TelegramWebhookHandler(c echo.Context) error {
+	var req telegram.WebhookRequest
+	err := c.Bind(&req)
+	if err != nil {
+		fmt.Printf("Unable to bind request: %v\n", err.Error())
+		return echo.NewHTTPError(http.StatusBadRequest)
+	}
+
+	chatID := req.Message.Chat.ID
+	var message string
+
+	inputText := req.Message.Text
+	if strings.HasPrefix(inputText, "/start") {
+		telegramUID := strings.TrimPrefix(inputText, "/start ")
+		filter := bson.D{{Key: "telegram_uid", Value: telegramUID}}
+		users, err := mongoDB.Find[model.User]("users", filter)
+		if err != nil {
+			fmt.Println(err.(*errors.Error).ErrorStack())
+			message = "Internal server error. Please try again later. If this problem persists, please contact the team"
+		} else if len(users) == 0 {
+			fmt.Printf("Cannot find user with telegram UID: %v\n", telegramUID)
+			message = "If you are trying to set up notifications, please sign in at our website (852-flight-deals.up.railway.app) and use the profile page to redirect to this bot"
+		} else if users[0].TelegramChatID == 0 {
+			updatedUser := users[0]
+			updatedUser.TelegramChatID = req.Message.Chat.ID
+			updatedUser.Notification = model.NotificationOn
+			mongoDB.ReplaceByID[model.User]("users", updatedUser.ID, updatedUser)
+			message = "Welcome to 852 Flight Deals! You have successfully set up notifications. You will now receive news about flight deals and discounts daily. Modify your notification settings (e.g. search filter) using the website: 852-flight-deals.up.railway.app"
+		} else {
+			message = "You have already set up notifications. Modify your notification settings (e.g. search filter) using the website: 852-flight-deals.up.railway.app"
+		}
+	} else {
+		message = "This bot sends new posts relating to flight deals and discounts around Hong Kong. Modify your notification settings using the website: \n852-flight-deals.up.railway.app"
+	}
+
+	telegram.NewNotifier().NotifyChat(chatID, message)
+	return c.JSON(http.StatusOK, struct{}{})
 }

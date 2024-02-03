@@ -24,3 +24,18 @@ func RemoveListDuplicates[T comparable](inputList []T) []T {
 
 	return uniqueList
 }
+
+func HaveOverlap[T comparable](list1 []T, list2 []T) bool {
+	m := make(map[T]bool)
+
+	for _, element := range list1 {
+		m[element] = true
+	}
+
+	for _, element := range list2 {
+		if m[element] {
+			return true
+		}
+	}
+	return false
+}

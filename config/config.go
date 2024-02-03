@@ -11,6 +11,7 @@ import (
 )
 
 type Config struct {
+	Prod   bool `default:"false" envconfig:"PROD"`
 	Server struct {
 		Port               string `default:"8080" envconfig:"FLIGHTAGG_PORT"`
 		Secret             []byte `required:"true" envconfig:"FLIGHTAGG_SECRET"`
@@ -20,8 +21,12 @@ type Config struct {
 		GithubClientSecret string `required:"true" envconfig:"FLIGHTAGG_GITHUB_CLIENT_SECRET"`
 		Domain             string `envconfig:"FLIGHTAGG_DOMAIN"`
 	}
+	NgrokURL string `envconfig:"FLIGHTAGG_NGROK_URL"`
 	Database struct {
 		MongodbUri string `required:"true" envconfig:"FLIGHTAGG_MONGODB_URI"`
+	}
+	Telegram struct {
+		BotToken string `required:"true" envconfig:"FLIGHTAGG_TELEGRAM_BOT_TOKEN"`
 	}
 	Email struct {
 		SendGridAPIKey string `required:"true" envconfig:"FLIGHTAGG_SENDGRID_API_KEY"`
@@ -59,6 +64,7 @@ func LoadConfig() {
 
 func loadConfigFromVariables() Config {
 	cfg := Config{}
+	cfg.Prod = true
 	cfg.Server.Port = os.Getenv("PORT")
 	cfg.Server.Secret = []byte(os.Getenv("FLIGHTAGG_SECRET"))
 	cfg.Server.GoogleClientID = os.Getenv("FLIGHTAGG_GOOGLE_CLIENT_ID")
@@ -67,6 +73,7 @@ func loadConfigFromVariables() Config {
 	cfg.Server.GithubClientSecret = os.Getenv("FLIGHTAGG_GITHUB_CLIENT_SECRET")
 	cfg.Server.Domain = os.Getenv("FLIGHTAGG_DOMAIN")
 	cfg.Database.MongodbUri = os.Getenv("FLIGHTAGG_MONGODB_URI")
+	cfg.Telegram.BotToken = os.Getenv("FLIGHTAGG_TELEGRAM_BOT_TOKEN")
 	cfg.Email.SendGridAPIKey = os.Getenv("FLIGHTAGG_SENDGRID_API_KEY")
 	cfg.Email.FromEmail = os.Getenv("FLIGHTAGG_FROM_EMAIL")
 	cfg.UIOrigin = os.Getenv("FLIGHTAGG_UI_ORIGIN")
