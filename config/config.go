@@ -29,8 +29,8 @@ type Config struct {
 		BotToken string `required:"true" envconfig:"FLIGHTAGG_TELEGRAM_BOT_TOKEN"`
 	}
 	Email struct {
-		SendGridAPIKey string `required:"true" envconfig:"FLIGHTAGG_SENDGRID_API_KEY"`
-		FromEmail      string `required:"true" envconfig:"FLIGHTAGG_FROM_EMAIL"`
+		SendGridAPIKey string `envconfig:"FLIGHTAGG_SENDGRID_API_KEY"`
+		FromEmail      string `envconfig:"FLIGHTAGG_FROM_EMAIL"`
 	}
 	UIOrigin string `default:"http://localhost:3000" envconfig:"FLIGHTAGG_UI_ORIGIN"`
 }
