@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-errors/errors"
 	"github.com/jeffyfung/flight-info-agg/config"
-	"github.com/jeffyfung/flight-info-agg/pkg/email"
+	"github.com/jeffyfung/flight-info-agg/pkg/notification/email"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
